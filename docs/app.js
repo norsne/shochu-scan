@@ -14,11 +14,6 @@ const FLOAT_GAP = 40;
 // 浮動卡跟著酒標旋轉的比例：0 = 永遠正對相機，1 = 完全貼著酒標
 const ROTATION_STEPS = [0, 0.3, 0.6, 1];
 const rotation = ROTATION_STEPS.includes(Number(params.get('rot'))) && params.has('rot') ? Number(params.get('rot')) : 0.3;
-// 距離拉開兩倍時，浮動卡在畫面上變成原本的幾倍（不調整的話是 0.5）
-const DISTANCE_SCALE = 0.75;
-const DISTANCE_EXPONENT = 1 + Math.log2(DISTANCE_SCALE); // 實際大小要乘上 (距離比)^這個值
-// 以酒標寬度佔畫面寬度 35% 的距離當基準，這個距離下卡片大小不變
-const REFERENCE_LABEL_FRACTION = 0.35;
 
 const els = {
   ar: $('#ar'),
@@ -47,23 +42,13 @@ const _scale = new Vector3();
 const _labelQ = new Quaternion();
 const _cardQ = new Quaternion();
 
-// 每次追蹤更新時調整浮動卡的旋轉與大小
-function updateFloat(group, obj, baseScale) {
+// 減少浮動卡的旋轉：在世界座標裡，正對相機 = 沒有旋轉，
+// 所以從「沒有旋轉」往酒標的實際旋轉只走 rotation 的比例，再換算回酒標座標
+function dampRotation(group, obj) {
   group.matrix.decompose(_pos, _labelQ, _scale);
-
-  // 減少旋轉：在世界座標裡，正對相機 = 沒有旋轉，
-  // 所以從「沒有旋轉」往酒標的實際旋轉只走 rotation 的比例，再換算回酒標座標
   labelAngle = Math.round((2 * Math.acos(Math.min(1, Math.abs(_labelQ.w))) * 180) / Math.PI);
   _cardQ.identity().slerp(_labelQ, rotation);
   obj.quaternion.copy(_labelQ.invert().multiply(_cardQ));
-
-  // 減少遠近縮放：距離（以酒標寬度為單位）跟基準距離比，再補償卡片大小
-  const { fov, aspect } = mindar.camera;
-  const tanHalfH = Math.tan((fov * Math.PI) / 360) * aspect;
-  const referenceDistance = 1 / (REFERENCE_LABEL_FRACTION * 2 * tanHalfH);
-  const distance = _pos.length() / (_scale.x * 1000);
-  const compensate = Math.min(Math.max((distance / referenceDistance) ** DISTANCE_EXPONENT, 0.5), 3);
-  obj.scale.setScalar(baseScale * compensate);
 }
 
 // ---------- 環境檢查 ----------
@@ -194,13 +179,12 @@ function setupMindAR() {
     const obj = new CSS3DObject(createFloat(index));
     // 卡片底邊貼在酒標上緣再往上 FLOAT_GAP；細長的酒標把卡片放大一點，免得字太小
     obj.position.y = (1000 * aspect) / 2 + FLOAT_GAP;
-    const baseScale = Math.min(Math.max(aspect * 0.55, 1), 1.4);
-    obj.scale.setScalar(baseScale);
+    obj.scale.setScalar(Math.min(Math.max(aspect * 0.55, 1), 1.4));
     anchor.group.add(obj);
     floats.push(obj.element);
     anchor.onTargetFound = () => { tracking = index; renderDebug(); };
     anchor.onTargetLost = () => { if (tracking === index) tracking = null; renderDebug(); };
-    anchor.onTargetUpdate = () => { if (anchor.visible) updateFloat(anchor.group, obj, baseScale); };
+    anchor.onTargetUpdate = () => { if (anchor.visible) dampRotation(anchor.group, obj); };
   });
 }
 
