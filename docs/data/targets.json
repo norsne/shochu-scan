@@ -1,0 +1,22 @@
+{
+  "sizes": [
+    300,
+    450,
+    600
+  ],
+  "defaultSize": 450,
+  "targets": [
+    {
+      "id": "sc-mitora",
+      "aspect": 1.699
+    },
+    {
+      "id": "sc-mn_beniharuka",
+      "aspect": 1.2277
+    },
+    {
+      "id": "sc-sononotsuyu",
+      "aspect": 2.4628
+    }
+  ]
+}

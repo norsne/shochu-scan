@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#11151d">
+  <title>燒酎掃掃看</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three/three.module.min.js",
+        "three/addons/": "./vendor/three/addons/"
+      }
+    }
+  </script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <!-- 最底層：相機畫面＋浮動卡（MindAR 會把 video 和 renderer 放進來，不能 display:none） -->
+  <div id="ar"></div>
+
+  <!-- 辨識畫面上的提示與按鈕 -->
+  <p id="hint" class="hint hidden">對準主打架上的酒標</p>
+  <button id="back" class="back hidden" type="button">‹ 首頁</button>
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <p>相機啟動中…</p>
+  </div>
+
+  <!-- 初始頁 -->
+  <section id="start" class="start">
+    <div class="start-inner">
+      <h1>燒酎掃掃看</h1>
+      <p class="lead">用手機相機對準燒酎酒標，酒款介紹就會浮現在酒瓶旁邊。</p>
+      <ol class="steps">
+        <li>按下「開始掃描」，允許使用相機</li>
+        <li>對準主打架上的酒標</li>
+        <li>點一下浮出來的卡片，看完整介紹</li>
+      </ol>
+      <div id="notice" class="notice hidden" role="alert"></div>
+      <button id="start-btn" class="primary" type="button" disabled>載入中…</button>
+      <p class="privacy">相機畫面只在你的手機上處理，不會上傳。</p>
+    </div>
+  </section>
+
+  <!-- 底部卡片 -->
+  <section id="sheet" class="sheet hidden" aria-labelledby="sheet-name">
+    <button id="sheet-close" class="sheet-close" type="button">關閉</button>
+    <h2 id="sheet-name" class="sheet-name"></h2>
+    <p class="sheet-brewery" data-field="brewery"></p>
+    <p class="sheet-reading" data-field="reading"></p>
+    <p class="meta" data-field="meta"></p>
+    <ul class="tags" data-field="tags"></ul>
+    <h3>風味</h3>
+    <p class="flavor" data-field="flavor"></p>
+    <h3>建議喝法</h3>
+    <p data-field="serving"></p>
+  </section>
+
+  <footer class="warning">理性飲酒‧飲酒過量有害健康</footer>
+
+  <div id="debug" class="debug hidden"></div>
+
+  <template id="float-tpl">
+    <div class="float-anchor">
+      <button class="float-card" type="button">
+        <span class="float-title"><b data-field="name"></b><small data-field="brewery"></small></span>
+        <span class="float-meta" data-field="meta"></span>
+        <span class="tags" data-field="tags"></span>
+        <span class="float-more" aria-hidden="true">›</span>
+      </button>
+    </div>
+  </template>
+</body>
+</html>
