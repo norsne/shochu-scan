@@ -11,9 +11,18 @@ const isAndroid = /Android/.test(ua);
 
 // 浮動卡與酒標的間距（酒標寬度 = 1000）
 const FLOAT_GAP = 40;
-// 浮動卡跟著酒標旋轉的比例：0 = 永遠正對相機，1 = 完全貼著酒標
+// 網址參數只接受清單裡的值，其他情況用預設值
+const stepParam = (name, steps, fallback) =>
+  params.has(name) && steps.includes(Number(params.get(name))) ? Number(params.get(name)) : fallback;
+// 浮動卡跟著酒標「畫面內旋轉」（繞鏡頭方向，例如瓶子左右歪）的比例
 const ROTATION_STEPS = [0, 0.3, 0.6, 1];
-const rotation = ROTATION_STEPS.includes(Number(params.get('rot'))) && params.has('rot') ? Number(params.get('rot')) : 0.3;
+const rotation = stepParam('rot', ROTATION_STEPS, 0.3);
+// 浮動卡跟著酒標「畫面外傾斜」（前後左右翻）的比例；0 = 永遠跟螢幕平行，不會變形
+const TILT_STEPS = [0, 0.1, 0.3];
+const tilt = stepParam('tilt', TILT_STEPS, 0);
+// MindAR 防抖參數 beta，按鈕只是方便切換，網址可以填任意值
+const BETA_STEPS = [1000, 500, 100, 10];
+const beta = params.has('beta') ? Number(params.get('beta')) : null; // null = MindAR 預設 1000
 
 const els = {
   ar: $('#ar'),
@@ -41,13 +50,25 @@ const _pos = new Vector3();
 const _scale = new Vector3();
 const _labelQ = new Quaternion();
 const _cardQ = new Quaternion();
+const _twistQ = new Quaternion();
+const _swingQ = new Quaternion();
+const _identity = new Quaternion();
 
-// 減少浮動卡的旋轉：在世界座標裡，正對相機 = 沒有旋轉，
-// 所以從「沒有旋轉」往酒標的實際旋轉只走 rotation 的比例，再換算回酒標座標
+// 減少浮動卡的旋轉：在世界座標裡，正對相機 = 沒有旋轉。
+// 把酒標的旋轉拆成「繞 z 軸的畫面內旋轉（twist）」和「其餘的畫面外傾斜（swing）」，
+// 各自從「沒有旋轉」只走 rotation／tilt 的比例，組回去後再換算回酒標座標
 function dampRotation(group, obj) {
   group.matrix.decompose(_pos, _labelQ, _scale);
   labelAngle = Math.round((2 * Math.acos(Math.min(1, Math.abs(_labelQ.w))) * 180) / Math.PI);
-  _cardQ.identity().slerp(_labelQ, rotation);
+
+  _twistQ.set(0, 0, _labelQ.z, _labelQ.w);
+  if (_twistQ.lengthSq() < 1e-8) _twistQ.identity(); // 剛好翻轉 180° 時沒有 twist
+  else _twistQ.normalize();
+  _swingQ.copy(_twistQ).invert().premultiply(_labelQ); // labelQ = swing × twist
+
+  _swingQ.slerp(_identity, 1 - tilt);
+  _twistQ.slerp(_identity, 1 - rotation);
+  _cardQ.copy(_swingQ).multiply(_twistQ);
   obj.quaternion.copy(_labelQ.invert().multiply(_cardQ));
 }
 
@@ -171,7 +192,7 @@ function setupMindAR() {
     uiScanning: '#hint',
     uiError: 'no',
     filterMinCF: params.has('cf') ? Number(params.get('cf')) : null,
-    filterBeta: params.has('beta') ? Number(params.get('beta')) : null,
+    filterBeta: beta,
   });
 
   targets.targets.forEach(({ aspect }, index) => {
@@ -269,21 +290,19 @@ function renderDebug() {
   els.debug.classList.remove('hidden');
   const state = !running ? '待機' : tracking == null ? '掃描中' : `追蹤 ${items[tracking].id}`;
   els.debug.innerHTML = `
-    <div>比對檔：短邊 ${size}px</div>
     <div>狀態：${state}</div>
     <div>FPS：${running ? fps : '-'}</div>
     <div>酒標角度：${tracking == null ? '-' : `${labelAngle}°`}</div>
-    <div>尺寸 ${targets.sizes.map((s) =>
-      `<button type="button" data-size="${s}" aria-pressed="${s === size}">${s}</button>`).join('')}</div>
-    <div>旋轉 ${ROTATION_STEPS.map((r) =>
-      `<button type="button" data-rot="${r}" aria-pressed="${r === rotation}">${r}</button>`).join('')}</div>`;
+    <div>傾斜 ${TILT_STEPS.map((t) =>
+      `<button type="button" data-tilt="${t}" aria-pressed="${t === tilt}">${t}</button>`).join('')}</div>
+    <div>beta ${BETA_STEPS.map((b) =>
+      `<button type="button" data-beta="${b}" aria-pressed="${b === (beta ?? 1000)}">${b}</button>`).join('')}</div>`;
 }
 
 els.debug.addEventListener('click', (e) => {
-  const { size: s, rot } = e.target.dataset;
-  if (s) params.set('size', s);
-  else if (rot) params.set('rot', rot);
-  else return;
+  const key = ['tilt', 'beta'].find((k) => k in e.target.dataset);
+  if (!key) return;
+  params.set(key, e.target.dataset[key]);
   location.search = params.toString();
 });
 
