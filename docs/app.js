@@ -1,3 +1,4 @@
+import { Quaternion, Vector3 } from 'three';
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 import { MindARThree } from './vendor/mindar/mindar-image-three.prod.js';
 
@@ -10,6 +11,9 @@ const isAndroid = /Android/.test(ua);
 
 // 浮動卡與酒標的間距（酒標寬度 = 1000）
 const FLOAT_GAP = 40;
+// 浮動卡跟著酒標旋轉的比例：0 = 永遠正對相機，1 = 完全貼著酒標
+const ROTATION_STEPS = [0, 0.3, 0.6, 1];
+const rotation = ROTATION_STEPS.includes(Number(params.get('rot'))) && params.has('rot') ? Number(params.get('rot')) : 0.3;
 
 const els = {
   ar: $('#ar'),
@@ -30,7 +34,22 @@ let size = 0;
 let mindar = null;
 let running = false;
 let tracking = null; // 目前追蹤中的酒款 index
+let labelAngle = 0; // 酒標相對於正對相機的角度（除錯用）
 const floats = [];
+
+const _pos = new Vector3();
+const _scale = new Vector3();
+const _labelQ = new Quaternion();
+const _cardQ = new Quaternion();
+
+// 減少浮動卡的旋轉：在世界座標裡，正對相機 = 沒有旋轉，
+// 所以從「沒有旋轉」往酒標的實際旋轉只走 rotation 的比例，再換算回酒標座標
+function dampRotation(group, obj) {
+  group.matrix.decompose(_pos, _labelQ, _scale);
+  labelAngle = Math.round((2 * Math.acos(Math.min(1, Math.abs(_labelQ.w))) * 180) / Math.PI);
+  _cardQ.identity().slerp(_labelQ, rotation);
+  obj.quaternion.copy(_labelQ.invert().multiply(_cardQ));
+}
 
 // ---------- 環境檢查 ----------
 
@@ -165,6 +184,7 @@ function setupMindAR() {
     floats.push(obj.element);
     anchor.onTargetFound = () => { tracking = index; renderDebug(); };
     anchor.onTargetLost = () => { if (tracking === index) tracking = null; renderDebug(); };
+    anchor.onTargetUpdate = () => { if (anchor.visible) dampRotation(anchor.group, obj); };
   });
 }
 
@@ -252,14 +272,18 @@ function renderDebug() {
     <div>比對檔：短邊 ${size}px</div>
     <div>狀態：${state}</div>
     <div>FPS：${running ? fps : '-'}</div>
-    <div>${targets.sizes.map((s) =>
-      `<button type="button" data-size="${s}" aria-pressed="${s === size}">${s}</button>`).join('')}</div>`;
+    <div>酒標角度：${tracking == null ? '-' : `${labelAngle}°`}</div>
+    <div>尺寸 ${targets.sizes.map((s) =>
+      `<button type="button" data-size="${s}" aria-pressed="${s === size}">${s}</button>`).join('')}</div>
+    <div>旋轉 ${ROTATION_STEPS.map((r) =>
+      `<button type="button" data-rot="${r}" aria-pressed="${r === rotation}">${r}</button>`).join('')}</div>`;
 }
 
 els.debug.addEventListener('click', (e) => {
-  const s = e.target.dataset.size;
-  if (!s) return;
-  params.set('size', s);
+  const { size: s, rot } = e.target.dataset;
+  if (s) params.set('size', s);
+  else if (rot) params.set('rot', rot);
+  else return;
   location.search = params.toString();
 });
 
