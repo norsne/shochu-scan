@@ -17,9 +17,9 @@ const stepParam = (name, steps, fallback) =>
 // 浮動卡跟著酒標「畫面內旋轉」（繞鏡頭方向，例如瓶子左右歪）的比例
 const ROTATION_STEPS = [0, 0.3, 0.6, 1];
 const rotation = stepParam('rot', ROTATION_STEPS, 0.3);
-// 浮動卡跟著酒標「畫面外傾斜」（前後左右翻）的比例；0 = 永遠跟螢幕平行，不會變形
+// 浮動卡跟著酒標「畫面外傾斜」（前後左右翻）的比例；0 = 永遠跟螢幕平行、不會變形，0.1 留一點立體感
 const TILT_STEPS = [0, 0.1, 0.3];
-const tilt = stepParam('tilt', TILT_STEPS, 0);
+const tilt = stepParam('tilt', TILT_STEPS, 0.1);
 // MindAR 防抖參數 beta，按鈕只是方便切換，網址可以填任意值
 const BETA_STEPS = [1000, 500, 100, 10];
 const beta = params.has('beta') ? Number(params.get('beta')) : null; // null = MindAR 預設 1000
