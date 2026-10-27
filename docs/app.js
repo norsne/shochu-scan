@@ -9,11 +9,14 @@ const ua = navigator.userAgent;
 const isIOS = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 const isAndroid = /Android/.test(ua);
 
-// 浮動卡與酒標的間距（酒標寬度 = 1000）
-const FLOAT_GAP = 40;
 // 網址參數只接受清單裡的值，其他情況用預設值
 const stepParam = (name, steps, fallback) =>
   params.has(name) && steps.includes(Number(params.get(name))) ? Number(params.get(name)) : fallback;
+// 浮動卡與酒標的間距（酒標寬度 = 1000）
+const GAP_STEPS = [0, 40, 80, 150];
+const floatGap = stepParam('gap', GAP_STEPS, 40);
+// 酒款資訊：預設全螢幕，?sheet=half 是舊的半版（比較用，定案後拿掉）
+const sheetHalf = params.get('sheet') === 'half';
 // 浮動卡跟著酒標「畫面內旋轉」（繞鏡頭方向，例如瓶子左右歪）的比例
 const ROTATION_STEPS = [0, 0.3, 0.6, 1];
 const rotation = stepParam('rot', ROTATION_STEPS, 0.3);
@@ -21,7 +24,7 @@ const rotation = stepParam('rot', ROTATION_STEPS, 0.3);
 const TILT_STEPS = [0, 0.1, 0.3];
 const tilt = stepParam('tilt', TILT_STEPS, 0.1);
 // MindAR 防抖參數 beta，按鈕只是方便切換，網址可以填任意值
-const BETA_STEPS = [1000, 500, 100, 10];
+const BETA_STEPS = [1000, 100, 10, 0];
 const beta = params.has('beta') ? Number(params.get('beta')) : null; // null = MindAR 預設 1000
 
 const els = {
@@ -169,7 +172,8 @@ function openSheet(index) {
   fillTags(s.querySelector('[data-field="tags"]'), it.tags, 'li');
   s.querySelector('[data-field="flavor"]').textContent = it.flavor;
   s.querySelector('[data-field="serving"]').textContent = it.serving;
-  s.scrollTop = 0;
+  s.querySelector('.sheet-body').scrollTop = 0;
+  if (s.classList.contains('hidden')) pushLayer();
   s.classList.remove('hidden');
   document.body.classList.add('sheet-open');
 }
@@ -179,7 +183,35 @@ function closeSheet() {
   document.body.classList.remove('sheet-open');
 }
 
-els.sheetClose.addEventListener('click', closeSheet);
+if (sheetHalf) els.sheet.classList.add('half');
+els.sheetClose.addEventListener('click', () => history.back());
+
+// ---------- 瀏覽紀錄 ----------
+
+// 掃描畫面和酒款資訊各記一筆瀏覽紀錄，按手機的返回只會退一層，不會離開網站。
+// 畫面上的按鈕也走 history.back()，實際的關閉都在 popstate 裡做，紀錄才不會亂掉
+let depth = 0; // 0 = 首頁、1 = 掃描畫面、2 = 酒款資訊
+
+function pushLayer() {
+  depth++;
+  history.pushState({ depth }, '');
+}
+
+function popAllLayers() {
+  if (depth > 0) history.go(-depth);
+}
+
+window.addEventListener('popstate', (e) => {
+  const target = e.state?.depth ?? 0;
+  // 按「下一頁」回到已經關掉的畫面時，直接退回去
+  if (target > depth) {
+    history.go(depth - target);
+    return;
+  }
+  depth = target;
+  if (depth < 2) closeSheet();
+  if (depth < 1) stopAR();
+});
 
 // ---------- AR ----------
 
@@ -198,8 +230,8 @@ function setupMindAR() {
   targets.targets.forEach(({ aspect }, index) => {
     const anchor = mindar.addCSSAnchor(index);
     const obj = new CSS3DObject(createFloat(index));
-    // 卡片底邊貼在酒標上緣再往上 FLOAT_GAP；細長的酒標把卡片放大一點，免得字太小
-    obj.position.y = (1000 * aspect) / 2 + FLOAT_GAP;
+    // 卡片底邊貼在酒標上緣再往上 floatGap；細長的酒標把卡片放大一點，免得字太小
+    obj.position.y = (1000 * aspect) / 2 + floatGap;
     obj.scale.setScalar(Math.min(Math.max(aspect * 0.55, 1), 1.4));
     anchor.group.add(obj);
     floats.push(obj.element);
@@ -236,6 +268,7 @@ async function startAR() {
     return;
   }
   running = true;
+  pushLayer();
   els.back.classList.remove('hidden');
   els.startBtn.disabled = false;
   startFrameLoop();
@@ -257,11 +290,13 @@ function stopAR() {
 }
 
 els.startBtn.addEventListener('click', startAR);
-els.back.addEventListener('click', stopAR);
+els.back.addEventListener('click', popAllLayers);
 
 // 切到別的 App 時相機會被系統停掉，回來後畫面會卡住，所以直接回初始頁
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) stopAR();
+  if (!document.hidden) return;
+  stopAR();
+  popAllLayers();
 });
 
 // ---------- 畫面更新與除錯 ----------
@@ -295,12 +330,14 @@ function renderDebug() {
     <div>酒標角度：${tracking == null ? '-' : `${labelAngle}°`}</div>
     <div>傾斜 ${TILT_STEPS.map((t) =>
       `<button type="button" data-tilt="${t}" aria-pressed="${t === tilt}">${t}</button>`).join('')}</div>
+    <div>間距 ${GAP_STEPS.map((g) =>
+      `<button type="button" data-gap="${g}" aria-pressed="${g === floatGap}">${g}</button>`).join('')}</div>
     <div>beta ${BETA_STEPS.map((b) =>
       `<button type="button" data-beta="${b}" aria-pressed="${b === (beta ?? 1000)}">${b}</button>`).join('')}</div>`;
 }
 
 els.debug.addEventListener('click', (e) => {
-  const key = ['tilt', 'beta'].find((k) => k in e.target.dataset);
+  const key = ['tilt', 'gap', 'beta'].find((k) => k in e.target.dataset);
   if (!key) return;
   params.set(key, e.target.dataset[key]);
   location.search = params.toString();

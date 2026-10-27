@@ -44,18 +44,22 @@
     </div>
   </section>
 
-  <!-- 底部卡片 -->
+  <!-- 酒款資訊（預設全螢幕，?sheet=half 是半版）：內容可以捲動，「繼續掃描」固定在下方 -->
   <section id="sheet" class="sheet hidden" aria-labelledby="sheet-name">
-    <button id="sheet-close" class="sheet-close" type="button">關閉</button>
-    <h2 id="sheet-name" class="sheet-name"></h2>
-    <p class="sheet-brewery" data-field="brewery"></p>
-    <p class="sheet-reading" data-field="reading"></p>
-    <p class="meta" data-field="meta"></p>
-    <ul class="tags" data-field="tags"></ul>
-    <h3>風味</h3>
-    <p class="flavor" data-field="flavor"></p>
-    <h3>建議喝法</h3>
-    <p data-field="serving"></p>
+    <div class="sheet-body">
+      <h2 id="sheet-name" class="sheet-name"></h2>
+      <p class="sheet-brewery" data-field="brewery"></p>
+      <p class="sheet-reading" data-field="reading"></p>
+      <p class="meta" data-field="meta"></p>
+      <ul class="tags" data-field="tags"></ul>
+      <h3>風味</h3>
+      <p class="flavor" data-field="flavor"></p>
+      <h3>建議喝法</h3>
+      <p data-field="serving"></p>
+    </div>
+    <div class="sheet-actions">
+      <button id="sheet-close" class="primary" type="button">繼續掃描</button>
+    </div>
   </section>
 
   <footer class="warning">理性飲酒‧飲酒過量有害健康</footer>
