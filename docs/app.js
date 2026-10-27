@@ -17,6 +17,12 @@ const GAP_STEPS = [0, 40, 80, 150];
 const floatGap = stepParam('gap', GAP_STEPS, 0);
 // 酒款資訊：預設全螢幕，?sheet=half 是舊的半版（比較用，定案後拿掉）
 const sheetHalf = params.get('sheet') === 'half';
+// 全螢幕版預設從浮動卡展開，?expand=0 改回從下往上滑入（比較用）
+const sheetExpand = !sheetHalf && params.get('expand') !== '0';
+// 浮動卡消失超過這麼久才重播彈出動畫，短暫掉追蹤時直接顯示，不會一直彈
+const POP_AFTER_MS = 1000;
+// 關掉酒款資訊後「結束掃描」等這麼久才出現，避免連點時第二下按到
+const BACK_DELAY_MS = 500;
 // 浮動卡跟著酒標「畫面內旋轉」（繞鏡頭方向，例如瓶子左右歪）的比例
 const ROTATION_STEPS = [0, 0.3, 0.6, 1];
 const rotation = stepParam('rot', ROTATION_STEPS, 0.3);
@@ -157,11 +163,33 @@ function createFloat(index) {
   el.querySelector('[data-field="brewery"]').textContent = it.brewery;
   el.querySelector('[data-field="meta"]').textContent = metaText(it);
   fillTags(el.querySelector('[data-field="tags"]'), it.tags, 'span');
-  el.querySelector('.float-card').addEventListener('click', () => openSheet(index));
+  const card = el.querySelector('.float-card');
+  card.addEventListener('click', () => openSheet(index, card));
   return el;
 }
 
-function openSheet(index) {
+// 重播彈出動畫：先拿掉 class、強制重新排版，再加回去
+function popFloat(index) {
+  const card = floats[index].querySelector('.float-card');
+  card.classList.remove('pop');
+  void card.offsetWidth;
+  card.classList.add('pop');
+}
+
+// 從浮動卡目前在畫面上的範圍展開：用 clip-path 遮罩，內容不會被壓扁；內容晚一點淡入
+function expandSheet(fromRect) {
+  const s = els.sheet;
+  const r = s.getBoundingClientRect();
+  const inset = [fromRect.top - r.top, r.right - fromRect.right, r.bottom - fromRect.bottom, fromRect.left - r.left]
+    .map((v) => `${Math.max(0, v)}px`).join(' ');
+  const easing = 'cubic-bezier(0.2, 0, 0, 1)';
+  s.animate([{ clipPath: `inset(${inset} round 16px)` }, { clipPath: 'inset(0px 0px 0px 0px round 0px)' }],
+    { duration: 300, easing });
+  s.querySelectorAll('.sheet-body, .sheet-actions').forEach((el) =>
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: 120, easing, fill: 'backwards' }));
+}
+
+function openSheet(index, fromCard) {
   const it = items[index];
   const s = els.sheet;
   $('#sheet-name').textContent = it.name;
@@ -172,14 +200,25 @@ function openSheet(index) {
   s.querySelector('[data-field="flavor"]').textContent = it.flavor;
   s.querySelector('[data-field="serving"]').textContent = it.serving;
   s.querySelector('.sheet-body').scrollTop = 0;
-  if (s.classList.contains('hidden')) pushLayer();
+  if (!s.classList.contains('hidden')) return;
+  pushLayer();
+  clearTimeout(backTimer);
+  els.back.classList.add('hidden');
+  const fromRect = sheetExpand && fromCard?.getBoundingClientRect();
+  s.classList.toggle('slide', !fromRect?.width);
   s.classList.remove('hidden');
   document.body.classList.add('sheet-open');
+  if (fromRect?.width) expandSheet(fromRect);
 }
 
+let backTimer = 0;
+
 function closeSheet() {
+  if (els.sheet.classList.contains('hidden')) return;
   els.sheet.classList.add('hidden');
   document.body.classList.remove('sheet-open');
+  clearTimeout(backTimer);
+  backTimer = setTimeout(() => { if (running) els.back.classList.remove('hidden'); }, BACK_DELAY_MS);
 }
 
 if (sheetHalf) els.sheet.classList.add('half');
@@ -234,8 +273,17 @@ function setupMindAR() {
     obj.scale.setScalar(Math.min(Math.max(aspect * 0.55, 1), 1.4));
     anchor.group.add(obj);
     floats.push(obj.element);
-    anchor.onTargetFound = () => { tracking = index; renderDebug(); };
-    anchor.onTargetLost = () => { if (tracking === index) tracking = null; renderDebug(); };
+    let lostAt = -Infinity;
+    anchor.onTargetFound = () => {
+      tracking = index;
+      if (performance.now() - lostAt > POP_AFTER_MS) popFloat(index);
+      renderDebug();
+    };
+    anchor.onTargetLost = () => {
+      lostAt = performance.now();
+      if (tracking === index) tracking = null;
+      renderDebug();
+    };
     anchor.onTargetUpdate = () => { if (anchor.visible) dampRotation(anchor.group, obj); };
   });
 }
@@ -282,6 +330,7 @@ function stopAR() {
   tracking = null;
   floats.forEach((el) => { el.style.visibility = 'hidden'; });
   closeSheet();
+  clearTimeout(backTimer);
   els.hint.classList.add('hidden');
   els.back.classList.add('hidden');
   els.start.classList.remove('hidden');

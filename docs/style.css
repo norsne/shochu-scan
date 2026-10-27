@@ -43,17 +43,24 @@ button { font: inherit; color: inherit; }
 }
 body.sheet-open .hint { display: none; }
 
+/* 結束掃描：正下方、警語上方，拇指最好按的位置；關掉酒款資訊後由 JS 延遲顯示，出現時淡入 */
 .back {
   position: fixed;
-  top: calc(12px + env(safe-area-inset-top));
-  left: 12px;
-  padding: 6px 12px;
-  border: 0;
+  left: 50%;
+  bottom: calc(var(--warning-h) + 16px);
+  transform: translateX(-50%);
+  min-height: 44px;
+  padding: 10px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.55);
-  font-size: 14px;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
   z-index: 11;
+  animation: fade-in 0.2s ease-out;
 }
+@keyframes fade-in { from { opacity: 0; } }
 
 .loading {
   position: fixed;
@@ -200,6 +207,13 @@ body.sheet-open .hint { display: none; }
   background: var(--surface-float);
   text-align: left;
   cursor: pointer;
+  transform-origin: 50% 100%;
+}
+/* 認出酒標時從酒標上緣彈出：只動 transform 和 opacity，交給 GPU，不會跟辨識搶 CPU */
+.float-card.pop { animation: float-pop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes float-pop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
 }
 .float-title { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 24px; row-gap: 4px; }
 .float-title b { font-size: 88px; line-height: 1.15; }
@@ -228,8 +242,9 @@ body.sheet-open .hint { display: none; }
   flex-direction: column;
   background: var(--bg);
   z-index: 12;
-  animation: sheet-in 0.25s ease-out;
 }
+/* 從浮動卡展開的動畫在 JS（expandSheet），沒有浮動卡可以展開時才用滑入 */
+.sheet.slide { animation: sheet-in 0.25s ease-out; }
 @keyframes sheet-in { from { transform: translateY(100%); } }
 .sheet-body,
 .sheet-actions {
