@@ -304,12 +304,3 @@ body.sheet-open .hint { display: none; }
   font: 12px/1.5 ui-monospace, monospace;
   z-index: 40;
 }
-.debug button {
-  margin: 4px 4px 0 0;
-  padding: 2px 8px;
-  border: 1px solid #888;
-  border-radius: 4px;
-  background: transparent;
-  font: inherit;
-}
-.debug button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }

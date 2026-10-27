@@ -12,9 +12,9 @@ const isAndroid = /Android/.test(ua);
 // 網址參數只接受清單裡的值，其他情況用預設值
 const stepParam = (name, steps, fallback) =>
   params.has(name) && steps.includes(Number(params.get(name))) ? Number(params.get(name)) : fallback;
-// 浮動卡與酒標的間距（酒標寬度 = 1000）
+// 浮動卡與酒標的間距（酒標寬度 = 1000）；0 = 緊貼酒標，抖動最小
 const GAP_STEPS = [0, 40, 80, 150];
-const floatGap = stepParam('gap', GAP_STEPS, 40);
+const floatGap = stepParam('gap', GAP_STEPS, 0);
 // 酒款資訊：預設全螢幕，?sheet=half 是舊的半版（比較用，定案後拿掉）
 const sheetHalf = params.get('sheet') === 'half';
 // 浮動卡跟著酒標「畫面內旋轉」（繞鏡頭方向，例如瓶子左右歪）的比例
@@ -23,9 +23,8 @@ const rotation = stepParam('rot', ROTATION_STEPS, 0.3);
 // 浮動卡跟著酒標「畫面外傾斜」（前後左右翻）的比例；0 = 永遠跟螢幕平行、不會變形，0.1 留一點立體感
 const TILT_STEPS = [0, 0.1, 0.3];
 const tilt = stepParam('tilt', TILT_STEPS, 0.1);
-// MindAR 防抖參數 beta，按鈕只是方便切換，網址可以填任意值
-const BETA_STEPS = [1000, 100, 10, 0];
-const beta = params.has('beta') ? Number(params.get('beta')) : null; // null = MindAR 預設 1000
+// MindAR 防抖參數 beta：0 = 截止頻率固定在 cf，最穩但動得快時會稍微延遲（MindAR 預設 1000 會抖）
+const beta = params.has('beta') ? Number(params.get('beta')) : 0;
 
 const els = {
   ar: $('#ar'),
@@ -327,21 +326,8 @@ function renderDebug() {
   els.debug.innerHTML = `
     <div>狀態：${state}</div>
     <div>FPS：${running ? fps : '-'}</div>
-    <div>酒標角度：${tracking == null ? '-' : `${labelAngle}°`}</div>
-    <div>傾斜 ${TILT_STEPS.map((t) =>
-      `<button type="button" data-tilt="${t}" aria-pressed="${t === tilt}">${t}</button>`).join('')}</div>
-    <div>間距 ${GAP_STEPS.map((g) =>
-      `<button type="button" data-gap="${g}" aria-pressed="${g === floatGap}">${g}</button>`).join('')}</div>
-    <div>beta ${BETA_STEPS.map((b) =>
-      `<button type="button" data-beta="${b}" aria-pressed="${b === (beta ?? 1000)}">${b}</button>`).join('')}</div>`;
+    <div>酒標角度：${tracking == null ? '-' : `${labelAngle}°`}</div>`;
 }
-
-els.debug.addEventListener('click', (e) => {
-  const key = ['tilt', 'gap', 'beta'].find((k) => k in e.target.dataset);
-  if (!key) return;
-  params.set(key, e.target.dataset[key]);
-  location.search = params.toString();
-});
 
 // ---------- 初始化 ----------
 
