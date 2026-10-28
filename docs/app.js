@@ -38,6 +38,9 @@ const els = {
   back: $('#back'),
   hint: $('#hint'),
   loading: $('#loading'),
+  loadingText: $('#loading-text'),
+  liquid: $('#liquid'),
+  liquidTop: $('#liquid-top'),
   sheet: $('#sheet'),
   sheetClose: $('#sheet-close'),
   debug: $('#debug'),
@@ -46,6 +49,7 @@ const els = {
 let items = [];
 let targets = null;
 let size = 0;
+let targetsSrc = null; // 下載好的辨識檔 blob URL，再次開始掃描不用重下
 let mindar = null;
 let running = false;
 let tracking = null; // 目前追蹤中的酒款 index
@@ -232,14 +236,105 @@ window.addEventListener('popstate', (e) => {
   if (depth < 1) stopAR();
 });
 
+// ---------- 載入畫面（小酒杯斟酒） ----------
+
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const POUR_EMPTY = 0.04; // 空杯也留一點底
+let pourLevel = POUR_EMPTY; // 畫面上的水位（0~1，1 = 液面在 y=24）
+let pourTarget = POUR_EMPTY;
+let slosh = 1; // 晃動幅度，水位變化越快晃越大
+let pourLast = 0;
+let pourRaf = 0;
+let pourDone = null; // 斟滿時呼叫
+
+function drawCup(t) {
+  const dt = pourLast ? Math.min((t - pourLast) / 1000, 0.1) : 0;
+  pourLast = t;
+  const prev = pourLevel;
+  pourLevel = reduceMotion ? pourTarget : pourLevel + (pourTarget - pourLevel) * Math.min(1, dt * 4);
+  const speed = dt ? Math.abs(pourLevel - prev) / dt : 0;
+  slosh += ((reduceMotion ? 0 : 1 + Math.min(speed * 8, 1.5)) - slosh) * Math.min(1, dt * 3);
+
+  const s = t / 1000;
+  const y0 = 68 - pourLevel * 44;
+  const tilt = Math.sin(s * 1.6) * 0.03 * slosh;
+  let surface = '';
+  for (let x = 10; x <= 90; x += 4) {
+    const wave = Math.sin(x * 0.12 + s * 3.2) * 0.6 + Math.sin(x * 0.07 - s * 2.1) * 0.4;
+    const y = y0 + tilt * (x - 50) + wave * slosh;
+    surface += `${x === 10 ? 'M' : 'L'}${x} ${y.toFixed(2)}`;
+  }
+  els.liquid.setAttribute('d', `${surface}L90 100L10 100Z`);
+  els.liquidTop.setAttribute('d', surface);
+
+  if (pourDone && pourLevel > 0.98) {
+    pourDone();
+    pourDone = null;
+  }
+  pourRaf = requestAnimationFrame(drawCup);
+}
+
+function showLoading(text) {
+  pourLevel = pourTarget = POUR_EMPTY;
+  pourLast = 0;
+  pourDone = null;
+  els.loadingText.textContent = text;
+  els.loading.classList.remove('hidden', 'fade');
+  cancelAnimationFrame(pourRaf);
+  pourRaf = requestAnimationFrame(drawCup);
+}
+
+function setPour(level, text) {
+  pourTarget = Math.max(pourTarget, level);
+  if (text) els.loadingText.textContent = text;
+}
+
+// rAF 只在載入畫面顯示時跑
+function hideLoading() {
+  cancelAnimationFrame(pourRaf);
+  pourDone = null;
+  els.loading.classList.add('hidden');
+  els.loading.classList.remove('fade');
+}
+
+// 斟滿再淡出；不等它跑完，掃描已經在後面開始了
+function finishLoading() {
+  setPour(1, '準備完成');
+  pourDone = () => {
+    els.loading.classList.add('fade');
+    setTimeout(hideLoading, 300);
+  };
+}
+
+// 自己下載辨識檔才算得出進度（MindAR 內部只是 fetch(imageTargetSrc)），轉成 blob URL 交給它
+async function downloadTargets(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} ${res.status}`);
+  const total = Number(res.headers.get('Content-Length'));
+  // 沒有檔案大小就算不出進度，酒杯只晃動不加水
+  if (!total || !res.body) return URL.createObjectURL(await res.blob());
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    const p = Math.min(received / total, 1);
+    setPour(0.15 + p * 0.65, `載入酒標資料 ${Math.round(p * 100)}%`);
+  }
+  return URL.createObjectURL(new Blob(chunks));
+}
+
 // ---------- AR ----------
 
 function setupMindAR() {
   mindar = new MindARThree({
     container: els.ar,
-    imageTargetSrc: `targets/targets-${size}.mind`,
+    imageTargetSrc: targetsSrc,
     maxTrack: 1,
-    uiLoading: '#loading',
+    uiLoading: 'no', // 載入畫面自己控制，MindAR 會太早關掉，來不及演斟滿
     uiScanning: '#hint',
     uiError: 'no',
     filterMinCF: params.has('cf') ? Number(params.get('cf')) : null,
@@ -284,18 +379,34 @@ async function startAR() {
   }
 
   els.start.classList.add('hidden');
+  // 階段：載入酒標資料 N%（第一次才有）→ 相機啟動與準備辨識（MindAR 內部，拆不開）→ 斟滿淡出
+  const url = `targets/targets-${size}.mind`;
+  if (!targetsSrc) {
+    showLoading('載入酒標資料…');
+    setPour(0.15);
+    try {
+      targetsSrc = await downloadTargets(url);
+    } catch (err) {
+      console.error(err); // 下載失敗就退回原網址，讓 MindAR 自己抓
+    }
+  } else {
+    showLoading('相機啟動中…');
+  }
+  setPour(0.9, '相機啟動中…');
   if (!mindar) setupMindAR();
+  mindar.imageTargetSrc = targetsSrc ?? url;
   try {
     await mindar.start();
   } catch (err) {
     console.error(err);
-    els.loading.classList.add('hidden');
+    hideLoading();
     els.start.classList.remove('hidden');
     showNotice(cameraErrorNotice(err));
     els.startBtn.disabled = false;
     return;
   }
   running = true;
+  finishLoading();
   pushLayer();
   els.back.classList.remove('hidden');
   els.startBtn.disabled = false;
