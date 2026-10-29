@@ -15,12 +15,8 @@ const stepParam = (name, steps, fallback) =>
 // 浮動卡與酒標的間距（酒標寬度 = 1000）；0 = 緊貼酒標，抖動最小
 const GAP_STEPS = [0, 40, 80, 150];
 const floatGap = stepParam('gap', GAP_STEPS, 0);
-// 浮動卡消失超過這麼久才重播彈出動畫，短暫掉追蹤時直接顯示，不會一直彈
+// 浮動卡消失超過這麼久才重播彈出動畫，短暫掉追蹤時直接顯示，不會一直彈；瞄準框也是離開這麼久才淡入
 const POP_AFTER_MS = 1000;
-// 關掉酒款資訊後「結束掃描」等這麼久才出現，避免連點時第二下按到
-const BACK_DELAY_MS = 500;
-// 酒款資訊往下滑走的時間，跟 style.css 的 sheet-out 一致
-const SHEET_OUT_MS = 250;
 // 浮動卡跟著酒標「畫面內旋轉」（繞鏡頭方向，例如瓶子左右歪）的比例
 const ROTATION_STEPS = [0, 0.3, 0.6, 1];
 const rotation = stepParam('rot', ROTATION_STEPS, 0.3);
@@ -35,8 +31,8 @@ const els = {
   start: $('#start'),
   startBtn: $('#start-btn'),
   notice: $('#notice'),
-  back: $('#back'),
-  hint: $('#hint'),
+  close: $('#close'),
+  scanUi: $('#scan-ui'),
   loading: $('#loading'),
   loadingText: $('#loading-text'),
   liquid: $('#liquid'),
@@ -190,14 +186,10 @@ function openSheet(index) {
   s.querySelector('.sheet-body').scrollTop = 0;
   if (sheetOpen()) return;
   pushLayer();
-  clearTimeout(backTimer);
-  els.back.classList.add('hidden');
   // 滑出途中又打開：拿掉 closing 會重播滑入
   s.classList.remove('hidden', 'closing');
   document.body.classList.add('sheet-open');
 }
-
-let backTimer = 0;
 
 const sheetOpen = () => !els.sheet.classList.contains('hidden') && !els.sheet.classList.contains('closing');
 
@@ -206,21 +198,18 @@ function closeSheet(instant = false) {
   const s = els.sheet;
   if (s.classList.contains('hidden')) return;
   document.body.classList.remove('sheet-open');
-  if (instant || reduceMotion) hideSheet(BACK_DELAY_MS);
+  if (instant || reduceMotion) hideSheet();
   else s.classList.add('closing');
 }
 
-// 真的收掉之後才開始算「結束掃描」的延遲：手機忙、動畫被拖慢時，按鈕不會在酒款資訊還沒滑走前就出現
-function hideSheet(backDelay) {
+function hideSheet() {
   els.sheet.classList.remove('closing');
   els.sheet.classList.add('hidden');
-  clearTimeout(backTimer);
-  backTimer = setTimeout(() => { if (running) els.back.classList.remove('hidden'); }, backDelay);
 }
 
 els.sheet.addEventListener('animationend', (e) => {
   if (e.target !== els.sheet || !els.sheet.classList.contains('closing')) return;
-  hideSheet(BACK_DELAY_MS - SHEET_OUT_MS);
+  hideSheet();
 });
 els.sheetClose.addEventListener('click', () => history.back());
 
@@ -344,13 +333,15 @@ async function downloadTargets(url) {
 
 // ---------- AR ----------
 
+let scanUiTimer = 0;
+
 function setupMindAR() {
   mindar = new MindARThree({
     container: els.ar,
     imageTargetSrc: targetsSrc,
     maxTrack: 1,
     uiLoading: 'no', // 載入畫面自己控制，MindAR 會太早關掉，來不及演斟滿
-    uiScanning: '#hint',
+    uiScanning: 'no', // 瞄準框和提示自己控制，才能淡入淡出、短暫掉追蹤時不閃
     uiError: 'no',
     filterMinCF: params.has('cf') ? Number(params.get('cf')) : null,
     filterBeta: beta,
@@ -368,11 +359,15 @@ function setupMindAR() {
     anchor.onTargetFound = () => {
       tracking = index;
       if (performance.now() - lostAt > POP_AFTER_MS) popFloat(index);
+      clearTimeout(scanUiTimer);
+      els.scanUi.classList.add('found');
       renderDebug();
     };
     anchor.onTargetLost = () => {
       lostAt = performance.now();
       if (tracking === index) tracking = null;
+      clearTimeout(scanUiTimer);
+      scanUiTimer = setTimeout(() => els.scanUi.classList.remove('found'), POP_AFTER_MS);
       renderDebug();
     };
     anchor.onTargetUpdate = () => { if (anchor.visible) dampRotation(anchor.group, obj); };
@@ -423,7 +418,8 @@ async function startAR() {
   running = true;
   finishLoading();
   pushLayer();
-  els.back.classList.remove('hidden');
+  els.scanUi.classList.remove('hidden', 'found');
+  els.close.classList.remove('hidden');
   els.startBtn.disabled = false;
   startFrameLoop();
   renderDebug();
@@ -437,15 +433,15 @@ function stopAR() {
   tracking = null;
   floats.forEach((el) => { el.style.visibility = 'hidden'; });
   closeSheet(true);
-  clearTimeout(backTimer);
-  els.hint.classList.add('hidden');
-  els.back.classList.add('hidden');
+  clearTimeout(scanUiTimer);
+  els.scanUi.classList.add('hidden');
+  els.close.classList.add('hidden');
   els.start.classList.remove('hidden');
   renderDebug();
 }
 
 els.startBtn.addEventListener('click', startAR);
-els.back.addEventListener('click', popAllLayers);
+els.close.addEventListener('click', popAllLayers);
 
 // 切到別的 App 時相機會被系統停掉，回來後畫面會卡住，所以直接回初始頁
 document.addEventListener('visibilitychange', () => {

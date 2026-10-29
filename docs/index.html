@@ -23,9 +23,12 @@
   <!-- 最底層：相機畫面＋浮動卡（MindAR 會把 video 和 renderer 放進來，不能 display:none） -->
   <div id="ar"></div>
 
-  <!-- 辨識畫面上的提示與按鈕 -->
-  <p id="hint" class="hint hidden">對準主打架上的酒標</p>
-  <button id="back" class="back hidden" type="button">結束掃描</button>
+  <!-- 辨識畫面上的提示與按鈕：瞄準框和提示在認到酒標時一起淡出 -->
+  <div id="scan-ui" class="scan-ui hidden">
+    <div class="aim" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+    <p class="hint">對準主打商品架上的酒標</p>
+  </div>
+  <button id="close" class="close hidden" type="button" aria-label="結束掃描"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3L15 15M15 3L3 15"/></svg></button>
   <div id="loading" class="loading hidden">
     <svg class="ochoko" viewBox="0 0 100 100" aria-hidden="true">
       <defs>
@@ -44,8 +47,9 @@
 
   <!-- 初始頁 -->
   <section id="start" class="start">
+    <div class="deco" aria-hidden="true"><i class="joka"></i></div>
     <div class="start-inner">
-      <h1>燒酎掃掃看<svg class="title-bottle" viewBox="8 1 8 22" fill="currentColor" aria-hidden="true"><path d="M11.2 1.5h1.6a.3.3 0 0 1 .3.3V8c0 2.5 2.4 2.5 2.4 5v8.7a.8.8 0 0 1-.8.8h-5.4a.8.8 0 0 1-.8-.8V13c0-2.5 2.4-2.5 2.4-5V1.8a.3.3 0 0 1 .3-.3z"/></svg></h1>
+      <h1><svg class="title-bottle" viewBox="8 1 8 22" fill="currentColor" aria-hidden="true"><path d="M11.2 1.5h1.6a.3.3 0 0 1 .3.3V8c0 2.5 2.4 2.5 2.4 5v8.7a.8.8 0 0 1-.8.8h-5.4a.8.8 0 0 1-.8-.8V13c0-2.5 2.4-2.5 2.4-5V1.8a.3.3 0 0 1 .3-.3z"/></svg>燒酎掃掃看</h1>
       <div class="start-body">
         <p class="lead">用手機相機對準燒酎酒標，酒款介紹就會浮現在酒瓶旁邊。</p>
         <ol class="steps">

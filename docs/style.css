@@ -10,8 +10,11 @@
   --tag-bg: rgba(237, 173, 69, 0.12);
   --notice-bg: rgba(237, 173, 69, 0.1);
   --surface-float: rgba(51, 61, 0, 0.9);
+  --deco-art: rgba(237, 173, 69, 0.2);
   --hint-bg: rgba(89, 89, 89, 0.75);
   --overlay-text: #f3efe6;
+  --close-bg: rgba(0, 0, 0, 0.35);
+  --aim: rgba(243, 239, 230, 0.9);
   --loading-bg: rgba(51, 61, 0, 0.7);
   --cup: #f3efe6;
   --liquid: rgba(240, 228, 196, 0.7);
@@ -39,9 +42,46 @@ button { font: inherit; color: inherit; }
   background: #000;
 }
 
+/* 瞄準框＋提示：還沒認到酒標時顯示；認到時 app.js 加上 found 淡出，酒標離開超過 1 秒才淡入 */
+.scan-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  pointer-events: none;
+  transition: opacity 0.2s ease-out;
+}
+.scan-ui.found { opacity: 0; }
+body.sheet-open .scan-ui { display: none; }
+
+/* 瞄準框：只畫四個 L 型角，只當引導（MindAR 掃整個畫面，酒標超出框也認得出來）
+   寬 48.3%、高是寬的 1.6 倍，中心在 44%，上方留空間給浮動卡；尋找中輕微呼吸 */
+.aim {
+  position: fixed;
+  left: 50%;
+  top: 44%;
+  width: 48.3vw;
+  aspect-ratio: 1 / 1.6;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6)); /* 酒標多半是淺色，加一圈暗影才看得到 */
+  animation: aim-breathe 2s ease-in-out infinite alternate;
+}
+.aim i {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 0 solid var(--aim);
+}
+.aim .tl { top: 0; left: 0; border-width: 3px 0 0 3px; border-top-left-radius: 6px; }
+.aim .tr { top: 0; right: 0; border-width: 3px 3px 0 0; border-top-right-radius: 6px; }
+.aim .bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-bottom-left-radius: 6px; }
+.aim .br { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-bottom-right-radius: 6px; }
+@keyframes aim-breathe { to { transform: translate(-50%, -50%) scale(1.04); } }
+@media (prefers-reduced-motion: reduce) { .aim { animation: none; } }
+
+/* 提示文字：正下方、警語上方 */
 .hint {
   position: fixed;
-  top: calc(16px + env(safe-area-inset-top));
+  bottom: calc(var(--warning-h) + 16px);
   left: 50%;
   transform: translateX(-50%);
   margin: 0;
@@ -51,32 +91,25 @@ button { font: inherit; color: inherit; }
   color: var(--overlay-text);
   font-size: 16.5px;
   white-space: nowrap;
-  z-index: 10;
-  pointer-events: none;
 }
-body.sheet-open .hint { display: none; }
 
-/* 結束掃描：正下方、警語上方，拇指最好按的位置；關掉酒款資訊後由 JS 延遲顯示，出現時淡入。跟提示文字都是原本的 1.1 倍
-   次要按鈕：框型跟開始掃描、繼續掃描一致，不透明底＋一般文字色、粗體（主次靠顏色分）；提示文字不是按鈕，用半透明灰色、一般字重區隔 */
-.back {
+/* 結束掃描：左上角的 ✕。正下方會被當成快門，消極選項也不需要放在最好按的位置；點擊範圍 44px，避開瀏海和動態島 */
+.close {
   position: fixed;
-  left: 50%;
-  bottom: calc(var(--warning-h) + 16px);
-  transform: translateX(-50%);
-  min-height: 48.4px;
-  padding: 11px 26.4px;
+  top: calc(8px + env(safe-area-inset-top));
+  left: calc(8px + env(safe-area-inset-left));
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-content: center;
+  padding: 0;
   border: 0;
-  border-radius: 14px;
-  background: var(--bg);
-  color: var(--text);
-  font-size: 16.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
+  border-radius: 50%;
+  background: var(--close-bg);
+  color: var(--overlay-text);
   z-index: 11;
-  animation: fade-in 0.2s ease-out;
 }
-@keyframes fade-in { from { opacity: 0; } }
+.close svg { width: 18px; height: 18px; }
 
 .loading {
   position: fixed;
@@ -99,6 +132,7 @@ body.sheet-open .hint { display: none; }
   position: fixed;
   inset: 0 0 var(--warning-h);
   overflow-y: auto;
+  overflow-x: hidden;
   background:
     radial-gradient(120% 60% at 50% 0%, var(--start-glow), transparent 60%),
     var(--bg);
@@ -106,6 +140,8 @@ body.sheet-open .hint { display: none; }
 }
 /* 標題固定在上方；說明到隱私說明這組，用剩下的高度依上 1：下 2 往下移，短手機沒有剩餘就維持原位 */
 .start-inner {
+  position: relative;
+  z-index: 1;
   max-width: 480px;
   min-height: 100%;
   margin: 0 auto;
@@ -122,14 +158,30 @@ body.sheet-open .hint { display: none; }
   text-align: center;
   color: var(--accent);
 }
-/* 酒瓶圖示跟文字一起置中；跟「看」之間是 0.06em 字距＋0.14em，約 0.2em。viewBox 裁到貼近瓶身，原檔是 svg/icon-sake-bottle.svg */
+/* 酒瓶圖示在標題左邊（跟右下的黒千代香對角），跟文字一起置中；跟「燒」之間約 0.2em
+   傾斜是原本放右邊時（逆時針 15°）的水平翻轉。viewBox 裁到貼近瓶身，原檔是 svg/icon-sake-bottle.svg */
 .start h1 .title-bottle {
   display: inline-block;
   width: calc(1em * 8 / 22);
   height: 1em;
-  margin-left: 0.14em;
+  margin-right: 0.2em;
   vertical-align: -0.12em;
-  transform: rotate(-15deg);
+  transform: rotate(15deg);
+}
+/* 右下黒千代香：放在內容後面，點擊會穿透；右邊超出畫面一點，超出的部分在 .deco 裁掉，不會撐寬頁面
+   跟隱私說明、提示框重疊可以接受（跳出提示框時不改大小，比較自然）
+   圖形當遮罩、底色填 --deco-art：三段路徑有重疊，直接用半透明填色的話，重疊的地方會變深。原檔是 svg/icon-kuro-joka.svg，viewBox 裁到貼近圖形 */
+.deco { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.deco .joka {
+  position: absolute;
+  right: -5vw;
+  bottom: 8px;
+  width: min(55.2vw, 33.6vh);
+  aspect-ratio: 21.6 / 18.2;
+  background: var(--deco-art);
+  -webkit-mask: var(--joka-mask) center / contain no-repeat;
+  mask: var(--joka-mask) center / contain no-repeat;
+  --joka-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='1.6 3.4 21.6 18.2'%3E%3Cpath d='M7.9 16.6C7 15.8 6.4 14.8 6.4 13.06a7.6 9.35 0 0 1 15.2 0c0 1.74-.6 2.74-1.5 3.54L18.9 16.1C19.8 15.3 20.24 14.5 20.24 13.06a6.24 7.94 0 0 0-12.48 0C7.76 14.5 8.2 15.3 9.1 16.1z'/%3E%3Cpath d='M7.6 15.92L2.69 13.34Q2.06 13.14 1.97 13.74L2.15 14.53 6.6 17.9z'/%3E%3Cpath d='M11.3 13.72V11.96Q11.3 11.52 11.7 11.52H13.1V10.86H14.9V11.52H16.3Q16.7 11.52 16.7 11.96V13.72C19.5 14.49 22 15.81 22.6 17.24Q22.8 17.79 22.2 18.12C20.5 19.22 18.5 19.88 17.4 20.1V21.2H10.6V20.1C9.5 19.88 7.5 19.22 5.8 18.12Q5.2 17.79 5.4 17.24C6 15.81 8.5 14.49 11.3 13.72z'/%3E%3C/svg%3E");
 }
 .lead { margin: 0 0 28px; font-size: 17px; line-height: 1.6; }
 .steps {
