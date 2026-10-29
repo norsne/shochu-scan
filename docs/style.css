@@ -10,7 +10,7 @@
   --tag-bg: rgba(237, 173, 69, 0.12);
   --notice-bg: rgba(237, 173, 69, 0.1);
   --surface-float: rgba(51, 61, 0, 0.9);
-  --overlay-bg: rgba(51, 61, 0, 0.75);
+  --hint-bg: rgba(89, 89, 89, 0.75);
   --overlay-text: #f3efe6;
   --loading-bg: rgba(51, 61, 0, 0.7);
   --cup: #f3efe6;
@@ -47,7 +47,7 @@ button { font: inherit; color: inherit; }
   margin: 0;
   padding: 8.8px 17.6px;
   border-radius: 999px;
-  background: var(--overlay-bg);
+  background: var(--hint-bg);
   color: var(--overlay-text);
   font-size: 16.5px;
   white-space: nowrap;
@@ -56,7 +56,8 @@ button { font: inherit; color: inherit; }
 }
 body.sheet-open .hint { display: none; }
 
-/* 結束掃描：正下方、警語上方，拇指最好按的位置；關掉酒款資訊後由 JS 延遲顯示，出現時淡入。跟提示文字都是原本的 1.1 倍 */
+/* 結束掃描：正下方、警語上方，拇指最好按的位置；關掉酒款資訊後由 JS 延遲顯示，出現時淡入。跟提示文字都是原本的 1.1 倍
+   次要按鈕：框型跟開始掃描、繼續掃描一致，不透明底＋一般文字色、粗體（主次靠顏色分）；提示文字不是按鈕，用半透明灰色、一般字重區隔 */
 .back {
   position: fixed;
   left: 50%;
@@ -65,10 +66,11 @@ body.sheet-open .hint { display: none; }
   min-height: 48.4px;
   padding: 11px 26.4px;
   border: 0;
-  border-radius: 999px;
-  background: var(--overlay-bg);
-  color: var(--overlay-text);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--text);
   font-size: 16.5px;
+  font-weight: 700;
   letter-spacing: 0.05em;
   white-space: nowrap;
   z-index: 11;
