@@ -15,12 +15,12 @@ const stepParam = (name, steps, fallback) =>
 // 浮動卡與酒標的間距（酒標寬度 = 1000）；0 = 緊貼酒標，抖動最小
 const GAP_STEPS = [0, 40, 80, 150];
 const floatGap = stepParam('gap', GAP_STEPS, 0);
-// 酒款資訊：預設全螢幕，?sheet=half 是舊的半版（比較用，定案後拿掉）
-const sheetHalf = params.get('sheet') === 'half';
 // 浮動卡消失超過這麼久才重播彈出動畫，短暫掉追蹤時直接顯示，不會一直彈
 const POP_AFTER_MS = 1000;
 // 關掉酒款資訊後「結束掃描」等這麼久才出現，避免連點時第二下按到
 const BACK_DELAY_MS = 500;
+// 酒款資訊往下滑走的時間，跟 style.css 的 sheet-out 一致
+const SHEET_OUT_MS = 250;
 // 浮動卡跟著酒標「畫面內旋轉」（繞鏡頭方向，例如瓶子左右歪）的比例
 const ROTATION_STEPS = [0, 0.3, 0.6, 1];
 const rotation = stepParam('rot', ROTATION_STEPS, 0.3);
@@ -188,25 +188,40 @@ function openSheet(index) {
   s.querySelector('[data-field="flavor"]').textContent = it.flavor;
   s.querySelector('[data-field="serving"]').textContent = it.serving;
   s.querySelector('.sheet-body').scrollTop = 0;
-  if (!s.classList.contains('hidden')) return;
+  if (sheetOpen()) return;
   pushLayer();
   clearTimeout(backTimer);
   els.back.classList.add('hidden');
-  s.classList.remove('hidden');
+  // 滑出途中又打開：拿掉 closing 會重播滑入
+  s.classList.remove('hidden', 'closing');
   document.body.classList.add('sheet-open');
 }
 
 let backTimer = 0;
 
-function closeSheet() {
-  if (els.sheet.classList.contains('hidden')) return;
-  els.sheet.classList.add('hidden');
+const sheetOpen = () => !els.sheet.classList.contains('hidden') && !els.sheet.classList.contains('closing');
+
+// 往下滑走，播完才隱藏；instant = 直接收掉（回首頁時，或開了減少動態效果）
+function closeSheet(instant = false) {
+  const s = els.sheet;
+  if (s.classList.contains('hidden')) return;
   document.body.classList.remove('sheet-open');
-  clearTimeout(backTimer);
-  backTimer = setTimeout(() => { if (running) els.back.classList.remove('hidden'); }, BACK_DELAY_MS);
+  if (instant || reduceMotion) hideSheet(BACK_DELAY_MS);
+  else s.classList.add('closing');
 }
 
-if (sheetHalf) els.sheet.classList.add('half');
+// 真的收掉之後才開始算「結束掃描」的延遲：手機忙、動畫被拖慢時，按鈕不會在酒款資訊還沒滑走前就出現
+function hideSheet(backDelay) {
+  els.sheet.classList.remove('closing');
+  els.sheet.classList.add('hidden');
+  clearTimeout(backTimer);
+  backTimer = setTimeout(() => { if (running) els.back.classList.remove('hidden'); }, backDelay);
+}
+
+els.sheet.addEventListener('animationend', (e) => {
+  if (e.target !== els.sheet || !els.sheet.classList.contains('closing')) return;
+  hideSheet(BACK_DELAY_MS - SHEET_OUT_MS);
+});
 els.sheetClose.addEventListener('click', () => history.back());
 
 // ---------- 瀏覽紀錄 ----------
@@ -421,7 +436,7 @@ function stopAR() {
   mindar.renderer.setAnimationLoop(null);
   tracking = null;
   floats.forEach((el) => { el.style.visibility = 'hidden'; });
-  closeSheet();
+  closeSheet(true);
   clearTimeout(backTimer);
   els.hint.classList.add('hidden');
   els.back.classList.add('hidden');
